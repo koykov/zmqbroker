@@ -1,8 +1,10 @@
 #include <iostream>
-#include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <map>
 #include <zmq.h>
 #include <zmq.hpp>
+#include <boost/json.hpp>
 
 struct config_t {
     std::string pattern;
@@ -14,25 +16,27 @@ struct config_t {
     int pub_timeout = 0;
 };
 
-const char *getenv_safe(const char *name);
-int iany(const std::string& key, int def);
-int load_config(config_t * dst);
+int load_config(config_t * dst, const char *fp);
 void proxy_xsub_xpub(config_t *conf);
 
-typedef void (*broker_fn)(config_t*);
+typedef void (*proxy_fn)(config_t*);
+typedef std::map<std::string, proxy_fn> proxy_map;
 
-static const std::map<std::string, broker_fn> PATTERNS = {
-        {"XSUB_XPUB", proxy_xsub_xpub},
-};
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        std::cerr << "not enough arguments (path to config file)" << std::endl;
+    }
+    proxy_map patterns;
+    patterns["XSUB_XPUB"] = proxy_xsub_xpub;
 
-int main() {
+    std::cout << argc << " " << argv[1] << std::endl;
     config_t conf;
-    auto ec = load_config(&conf);
+    auto ec = load_config(&conf, argv[1]);
     if (ec != EXIT_SUCCESS) { return ec; }
 
     std::cout << "starting " << conf.pattern << " broker" << std::endl;
-    auto fn = PATTERNS.find(conf.pattern);
-    if (fn == PATTERNS.end()) {
+    auto fn = patterns.find(conf.pattern);
+    if (fn == patterns.end()) {
         std::cout << "unknown pattern" << std::endl;
         return EXIT_FAILURE;
     }
@@ -41,32 +45,35 @@ int main() {
     return EXIT_SUCCESS;
 }
 
-int iany(const std::string& key, int def) {
-    auto v = atoi(getenv_safe(key.c_str()));
-    if (v <= 0) { return def; }
-    return v;
-}
+int load_config(config_t * dst, const char *fp) {
+    std::ifstream f(fp);
+    if (!f.is_open()) { return EXIT_FAILURE; }
+    std::stringstream ss;
+    ss << f.rdbuf();
 
-const char *getenv_safe(const char *name) {
-    auto p = std::getenv(name);
-    if (p == nullptr) { return ""; }
-    return p;
-}
+    boost::json::stream_parser p;
+    boost::json::error_code ec;
 
-int load_config(config_t * dst) {
-    dst->pattern = getenv_safe("PATTERN");
-    if (dst->pattern.empty()) { return EXIT_FAILURE; }
-    if (PATTERNS.find(dst->pattern) == PATTERNS.end()) { return EXIT_FAILURE; }
-
-    dst->sub_addr = getenv_safe("SUB_ADDR");
-    if (dst->sub_addr.empty()) { return EXIT_FAILURE; }
-    dst->sub_hwm = iany("SUB_HWM", 1000000);
-    dst->sub_timeout = iany("SUB_TIMEOUT", 100);
-
-    dst->pub_addr = getenv_safe("PUB_ADDR");
-    if (dst->pub_addr.empty()) { return EXIT_FAILURE; }
-    dst->pub_hwm = iany("PUB_HWM", 1000000);
-    dst->pub_timeout = iany("PUB_TIMEOUT", 100);
+    p.write(ss.str().c_str(), ss.str().length(), ec);
+    if (ec) { return EXIT_FAILURE; }
+    p.finish(ec);
+    if (ec) { return EXIT_FAILURE; }
+    auto root = p.release();
+    
+    
+//    dst->pattern = getenv_safe("PATTERN");
+//    if (dst->pattern.empty()) { return EXIT_FAILURE; }
+//    if (PATTERNS.find(dst->pattern) == PATTERNS.end()) { return EXIT_FAILURE; }
+//
+//    dst->sub_addr = getenv_safe("SUB_ADDR");
+//    if (dst->sub_addr.empty()) { return EXIT_FAILURE; }
+//    dst->sub_hwm = iany("SUB_HWM", 1000000);
+//    dst->sub_timeout = iany("SUB_TIMEOUT", 100);
+//
+//    dst->pub_addr = getenv_safe("PUB_ADDR");
+//    if (dst->pub_addr.empty()) { return EXIT_FAILURE; }
+//    dst->pub_hwm = iany("PUB_HWM", 1000000);
+//    dst->pub_timeout = iany("PUB_TIMEOUT", 100);
 
     return EXIT_SUCCESS;
 }
