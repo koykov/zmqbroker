@@ -29,7 +29,6 @@ int main(int argc, char *argv[]) {
     proxy_map patterns;
     patterns["XSUB_XPUB"] = proxy_xsub_xpub;
 
-    std::cout << argc << " " << argv[1] << std::endl;
     config_t conf;
     auto ec = load_config(&conf, argv[1]);
     if (ec != EXIT_SUCCESS) { return ec; }
@@ -46,34 +45,35 @@ int main(int argc, char *argv[]) {
 }
 
 int load_config(config_t * dst, const char *fp) {
-    std::ifstream f(fp);
-    if (!f.is_open()) { return EXIT_FAILURE; }
-    std::stringstream ss;
-    ss << f.rdbuf();
+    try {
+        std::ifstream f(fp);
+        if (!f.is_open()) { return EXIT_FAILURE; }
+        std::stringstream ss;
+        ss << f.rdbuf();
 
-    boost::json::stream_parser p;
-    boost::json::error_code ec;
+        boost::json::stream_parser p;
+        boost::json::error_code ec;
 
-    p.write(ss.str().c_str(), ss.str().length(), ec);
-    if (ec) { return EXIT_FAILURE; }
-    p.finish(ec);
-    if (ec) { return EXIT_FAILURE; }
-    auto root = p.release();
-    
-    
-//    dst->pattern = getenv_safe("PATTERN");
-//    if (dst->pattern.empty()) { return EXIT_FAILURE; }
-//    if (PATTERNS.find(dst->pattern) == PATTERNS.end()) { return EXIT_FAILURE; }
-//
-//    dst->sub_addr = getenv_safe("SUB_ADDR");
-//    if (dst->sub_addr.empty()) { return EXIT_FAILURE; }
-//    dst->sub_hwm = iany("SUB_HWM", 1000000);
-//    dst->sub_timeout = iany("SUB_TIMEOUT", 100);
-//
-//    dst->pub_addr = getenv_safe("PUB_ADDR");
-//    if (dst->pub_addr.empty()) { return EXIT_FAILURE; }
-//    dst->pub_hwm = iany("PUB_HWM", 1000000);
-//    dst->pub_timeout = iany("PUB_TIMEOUT", 100);
+        p.write(ss.str().c_str(), ss.str().length(), ec);
+        if (ec) { return EXIT_FAILURE; }
+        p.finish(ec);
+        if (ec) { return EXIT_FAILURE; }
+        auto root = p.release().get_object();
+
+        dst->pattern = root.at("pattern").as_string().c_str();
+
+        auto sub = root.at("sub").get_object();
+        dst->sub_addr = sub.at("addr").as_string().c_str();
+        dst->sub_hwm = int(sub.at("hwm").as_int64());
+        dst->sub_timeout = int(sub.at("timeo").as_int64());
+
+        auto pub = root.at("pub").get_object();
+        dst->pub_addr = pub.at("addr").as_string().c_str();
+        dst->pub_hwm = int(pub.at("hwm").as_int64());
+        dst->pub_timeout = int(pub.at("timeo").as_int64());
+    } catch (int e) {
+        return EXIT_FAILURE;
+    }
 
     return EXIT_SUCCESS;
 }
@@ -86,7 +86,6 @@ void proxy_xsub_xpub(config_t *conf) {
     zmq_setsockopt(ssub, ZMQ_RCVTIMEO, &conf->sub_timeout, sizeof(conf->sub_timeout));
     ssub.bind(conf->sub_addr);
     std::cout << " > XSUB socket address " << conf->sub_addr << std::endl;
-
 
     zmq::socket_t spub (ctx, ZMQ_XPUB);
     zmq_setsockopt(spub, ZMQ_SNDHWM, &conf->pub_hwm, sizeof(conf->pub_hwm));
