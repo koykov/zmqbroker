@@ -2,7 +2,7 @@
 #include <fstream>
 #include <map>
 #include <zmq.h>
-#include <zmq.hpp>
+#include "zmq.hpp"
 #include <boost/json.hpp>
 
 struct config_t {
@@ -92,5 +92,5 @@ void proxy_xsub_xpub(config_t *conf) {
     spub.bind(conf->pub_addr);
     std::cout << " > XPUB socket address " << conf->pub_addr << std::endl;
 
-    zmq::proxy(ssub, spub);
+    zmq::proxy(ssub, spub, nullptr);
 }
