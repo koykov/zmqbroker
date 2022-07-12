@@ -1,6 +1,5 @@
 #include <iostream>
 #include <fstream>
-#include <sstream>
 #include <map>
 #include <zmq.h>
 #include <zmq.hpp>
